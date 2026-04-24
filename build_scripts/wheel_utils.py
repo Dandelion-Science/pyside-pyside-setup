@@ -41,27 +41,9 @@ def get_qt_version():
 @memoize
 def get_package_version():
     """ Returns the version string for the PySide6 package. """
-    setup_script_dir = Path.cwd()
-    pyside_project_dir = setup_script_dir / "sources" / PYSIDE
-    d = parse_cmake_conf_assignments_by_key(pyside_project_dir)
-    major_version = d['pyside_MAJOR_VERSION']
-    minor_version = d['pyside_MINOR_VERSION']
-    patch_version = d['pyside_MICRO_VERSION']
-
-    final_version = f"{major_version}.{minor_version}.{patch_version}"
-    release_version_type = d.get('pyside_PRE_RELEASE_VERSION_TYPE')
-    pre_release_version = d.get('pyside_PRE_RELEASE_VERSION')
-
-    if release_version_type and not release_version_type.startswith("comm") and pre_release_version:
-        final_version = f"{final_version}{release_version_type}{pre_release_version}"
-    if release_version_type and release_version_type.startswith("comm"):
-        final_version = f"{final_version}+{release_version_type}"
-
-    # Add the current timestamp to the version number, to suggest it
-    # is a development snapshot build.
-    if OPTION["SNAPSHOT_BUILD"]:
-        final_version = f"{final_version}.dev{get_package_timestamp()}"
-    return final_version
+    # Hard-coded version for Dandelion-Science patched build.
+    # Bump this when applying new patches on top of an upstream release.
+    return "6.11.0.post1"
 
 
 def macos_qt_min_deployment_target():
