@@ -166,7 +166,12 @@ jobs:
           pattern: wheels-*
           merge-multiple: true
           path: dist
-      - run: ls -la dist/
+      - name: Filter wheels (exclude shiboken6_generator)
+        run: |
+          ls -la dist/
+          rm -f dist/shiboken6_generator-*.whl
+          echo "=== Wheels to publish ==="
+          ls -la dist/
       - uses: softprops/action-gh-release@v2
         with:
           files: dist/*.whl
