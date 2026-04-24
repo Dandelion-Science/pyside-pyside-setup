@@ -177,12 +177,19 @@ jobs:
       - name: Download abi3 wheels from PyPI
         run: |
           # CodeArtifact doesn't merge published wheels with upstream PyPI assets.
-          # Download the stock abi3 wheels so we publish the complete set (abi3 +
-          # cp314t) and all Python versions resolve correctly.
+          # Download all abi3 wheels (every platform) from PyPI via the JSON API
+          # so we publish the complete set alongside our cp314t wheels.
           for pkg in shiboken6 PySide6-Essentials PySide6-Addons PySide6; do
-            pip download "$pkg==${{ env.QT_VERSION }}" \
-              --no-deps --only-binary :all: \
-              --dest dist/ || echo "Warning: failed to download $pkg"
+            echo "Downloading $pkg..."
+            curl -sL "https://pypi.org/pypi/$pkg/${{ env.QT_VERSION }}/json" \
+              | python3 -c "
+          import sys, json
+          for f in json.load(sys.stdin)['urls']:
+              if f['filename'].endswith('.whl'):
+                  print(f['url'], f['filename'])
+          " | while read url filename; do
+                curl -sL -o "dist/$filename" "$url"
+              done
           done
           echo "=== Wheels to publish ==="
           ls -la dist/
