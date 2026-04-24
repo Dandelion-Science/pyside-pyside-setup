@@ -174,6 +174,16 @@ jobs:
         run: |
           ls -la dist/
           rm -f dist/shiboken6_generator-*.whl
+      - name: Download abi3 wheels from PyPI
+        run: |
+          # CodeArtifact doesn't merge published wheels with upstream PyPI assets.
+          # Download the stock abi3 wheels so we publish the complete set (abi3 +
+          # cp314t) and all Python versions resolve correctly.
+          for pkg in shiboken6 PySide6-Essentials PySide6-Addons PySide6; do
+            pip download "$pkg==${{ env.QT_VERSION }}" \
+              --no-deps --only-binary :all: \
+              --dest dist/ || echo "Warning: failed to download $pkg"
+          done
           echo "=== Wheels to publish ==="
           ls -la dist/
       - uses: softprops/action-gh-release@v2
