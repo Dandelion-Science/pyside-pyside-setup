@@ -52,7 +52,6 @@ Tracker = "https://qt-project.atlassian.net/browse/PYSIDE"
 # PROJECT_SCRIPTS
 
 [tool.distutils.bdist_wheel]
-py_limited_api = "cp310"
 plat_name = "PROJECT_TAG"
 
 [tool.setuptools.dynamic]
