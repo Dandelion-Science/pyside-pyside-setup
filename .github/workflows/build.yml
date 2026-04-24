@@ -1,0 +1,205 @@
+name: Build
+
+on:
+  push:
+  pull_request:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+env:
+  QT_VERSION: "6.11.0"
+  PYSIDE_MODULE_SUBSET: "Core,Gui,Widgets"
+  LLVM_VERSION: "18.1.7"
+
+jobs:
+  build-macos:
+    if: ${{ github.repository == 'Dandelion-Science/pyside-pyside-setup' }}
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v7
+      - name: Install system dependencies
+        run: brew install cmake ninja llvm
+      - name: Set up Python 3.14t
+        run: |
+          uv venv --python 3.14t .venv
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+          echo "VIRTUAL_ENV=$PWD/.venv" >> "$GITHUB_ENV"
+      - name: Install build dependencies
+        run: |
+          uv pip install --python .venv/bin/python \
+            packaging setuptools wheel aqtinstall build pyproject_hooks \
+            -r requirements-coin.txt
+      - name: Download Qt ${{ env.QT_VERSION }}
+        run: |
+          .venv/bin/python -m aqt install-qt mac desktop ${{ env.QT_VERSION }} clang_64 \
+            --outputdir qt
+          echo "QT_PATH=$PWD/qt/${{ env.QT_VERSION }}/macos" >> "$GITHUB_ENV"
+      - name: Build PySide6
+        run: |
+          LLVM_INSTALL_DIR="$(brew --prefix llvm)" \
+          .venv/bin/python setup.py build \
+            --qtpaths="$QT_PATH/bin/qtpaths6" \
+            --limited-api=no \
+            --standalone \
+            --module-subset=${{ env.PYSIDE_MODULE_SUBSET }} \
+            --parallel=4
+      - name: Install PySide6
+        run: |
+          LLVM_INSTALL_DIR="$(brew --prefix llvm)" \
+          .venv/bin/python setup.py install \
+            --qtpaths="$QT_PATH/bin/qtpaths6" \
+            --limited-api=no \
+            --standalone \
+            --module-subset=${{ env.PYSIDE_MODULE_SUBSET }} \
+            --parallel=4 \
+            --reuse-build \
+            --skip-cmake
+      - name: Create wheels
+        run: .venv/bin/python create_wheels.py --no-examples
+      - name: Verify import
+        run: |
+          .venv/bin/python -c "
+          import sys
+          print('GIL before:', sys._is_gil_enabled())
+          from PySide6.QtWidgets import QApplication
+          print('PySide6.QtWidgets imported')
+          print('GIL after:', sys._is_gil_enabled())
+          "
+      - uses: actions/upload-artifact@v7
+        with:
+          name: wheels-macos-arm64
+          path: dist/*.whl
+
+  build-linux:
+    if: ${{ github.repository == 'Dandelion-Science/pyside-pyside-setup' }}
+    runs-on: ubuntu-latest
+    container:
+      image: quay.io/pypa/manylinux_2_34_x86_64
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install system dependencies
+        run: |
+          dnf install -y cmake ninja-build p7zip perl-FindBin libxkbcommon-devel
+          curl -LO "https://master.qt.io/development_releases/prebuilt/libclang/libclang-release_${{ env.LLVM_VERSION }}-based-linux-Rhel8.6-gcc10.3-x86_64.7z"
+          7za x "libclang-release_${{ env.LLVM_VERSION }}-based-linux-Rhel8.6-gcc10.3-x86_64.7z" -o/opt
+          rm "libclang-release_${{ env.LLVM_VERSION }}-based-linux-Rhel8.6-gcc10.3-x86_64.7z"
+          echo "LLVM_INSTALL_DIR=/opt/libclang" >> "$GITHUB_ENV"
+      - name: Set up uv and Python 3.14t
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          # Force uv to download its own managed Python (python-build-standalone)
+          # rather than using the manylinux system Python which lacks libpython.so
+          UV_PYTHON_PREFERENCE=only-managed "$HOME/.local/bin/uv" venv --python 3.14t .venv
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+          echo "VIRTUAL_ENV=$PWD/.venv" >> "$GITHUB_ENV"
+      - name: Install build dependencies
+        run: |
+          uv pip install --python .venv/bin/python \
+            packaging setuptools wheel aqtinstall build pyproject_hooks \
+            -r requirements-coin.txt
+      - name: Download Qt ${{ env.QT_VERSION }}
+        run: |
+          .venv/bin/python -m aqt install-qt linux desktop ${{ env.QT_VERSION }} linux_gcc_64 \
+            --outputdir qt
+          echo "QT_PATH=$PWD/qt/${{ env.QT_VERSION }}/gcc_64" >> "$GITHUB_ENV"
+      - name: Verify Qt installation
+        run: |
+          echo "=== qtpaths6 ==="
+          "$QT_PATH/bin/qtpaths6" --qt-version
+          echo "=== GuiPrivate cmake config ==="
+          ls "$QT_PATH/lib/cmake/Qt6GuiPrivate/"
+          echo "=== CorePrivate cmake config ==="
+          ls "$QT_PATH/lib/cmake/Qt6CorePrivate/"
+          echo "=== Gui private headers ==="
+          ls "$QT_PATH/include/QtGui/6.11.0/QtGui/private/" | head -5
+          echo "=== Python libdir ==="
+          .venv/bin/python -c "import sysconfig; print(sysconfig.get_config_var('LIBDIR'))"
+          ls $(.venv/bin/python -c "import sysconfig; print(sysconfig.get_config_var('LIBDIR'))")/libpython* 2>&1 || echo "No libpython found"
+      - name: Build PySide6
+        run: |
+          .venv/bin/python setup.py build \
+            --qtpaths="$QT_PATH/bin/qtpaths6" \
+            --limited-api=no \
+            --standalone \
+            --log-level=verbose \
+            --module-subset=${{ env.PYSIDE_MODULE_SUBSET }} \
+            --parallel=$(nproc)
+      - name: Install PySide6
+        run: |
+          .venv/bin/python setup.py install \
+            --qtpaths="$QT_PATH/bin/qtpaths6" \
+            --limited-api=no \
+            --standalone \
+            --module-subset=${{ env.PYSIDE_MODULE_SUBSET }} \
+            --parallel=$(nproc) \
+            --reuse-build \
+            --skip-cmake
+      - name: Create wheels
+        run: .venv/bin/python create_wheels.py --no-examples
+      - name: Repair wheels (manylinux tagging)
+        run: |
+          uv pip install --python .venv/bin/python auditwheel
+          mkdir -p dist-repaired
+          for whl in dist/*.whl; do
+            .venv/bin/python -m auditwheel repair "$whl" \
+              --plat manylinux_2_34_x86_64 \
+              -w dist-repaired || cp "$whl" dist-repaired/
+          done
+          rm -rf dist
+          mv dist-repaired dist
+      - name: Verify import
+        run: |
+          .venv/bin/python -c "
+          import sys
+          print('GIL before:', sys._is_gil_enabled())
+          from PySide6.QtWidgets import QApplication
+          print('PySide6.QtWidgets imported')
+          print('GIL after:', sys._is_gil_enabled())
+          "
+      - uses: actions/upload-artifact@v7
+        with:
+          name: wheels-linux-x86_64
+          path: dist/*.whl
+
+  publish:
+    if: ${{ github.repository == 'Dandelion-Science/pyside-pyside-setup' && github.event_name == 'release' }}
+    needs: [build-macos, build-linux]
+    permissions:
+      id-token: write
+      contents: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: wheels-*
+          merge-multiple: true
+          path: dist
+      - run: ls -la dist/
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.whl
+          tag_name: ${{ github.event.release.tag_name }}
+      - uses: aws-actions/configure-aws-credentials@v6
+        with:
+          aws-region: ${{ vars.AWS_REGION }}
+          role-to-assume: ${{ vars.ARN_IAM_ROLE_GHA_CORE }}
+      - name: Get CodeArtifact authorization token
+        run: |
+          AWS_CODEARTIFACT_TOKEN=$(aws codeartifact get-authorization-token \
+            --domain ${{ vars.CODEARTIFACT_DOMAIN }} \
+            --domain-owner ${{ vars.CODEARTIFACT_DOMAIN_OWNER }} \
+            --query authorizationToken \
+            --output text)
+          echo "AWS_CODEARTIFACT_TOKEN=$AWS_CODEARTIFACT_TOKEN" >> $GITHUB_ENV
+      - uses: astral-sh/setup-uv@v7
+      - run: uv publish dist/*.whl
+        env:
+          UV_PUBLISH_USERNAME: aws
+          UV_PUBLISH_PASSWORD: ${{ env.AWS_CODEARTIFACT_TOKEN }}
+          UV_PUBLISH_URL: ${{ vars.CODEARTIFACT_PYPI_STORE_REPOSITORY_URL }}

@@ -1,3 +1,5 @@
+import sys
+import sysconfig
 import setuptools
 from setuptools import setup, Extension, Command
 
@@ -17,10 +19,13 @@ class build_ext(Command):
     def get_requires_for_build_wheel(self):
         pass
 
+# The limited API is not supported on free-threaded Python builds.
+_use_limited_api = not bool(sysconfig.get_config_var("Py_GIL_DISABLED"))
+
 setup_args = dict(
     include_package_data=True,
     packages = ["{name}"],
-    ext_modules = [Extension("{fake_ext}", [], py_limited_api=True)],
+    ext_modules = [Extension("{fake_ext}", [], py_limited_api=_use_limited_api)],
     cmdclass=dict([("build_ext", build_ext)]),
 )
 setup(**setup_args)
