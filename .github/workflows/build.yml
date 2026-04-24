@@ -25,9 +25,9 @@ jobs:
         run: |
           brew install cmake ninja p7zip
           curl -sLO "https://master.qt.io/development_releases/prebuilt/libclang/libclang-release_${{ env.LLVM_VERSION }}-based-macos-universal.7z"
-          7za x "libclang-release_${{ env.LLVM_VERSION }}-based-macos-universal.7z" -o/opt > /dev/null
+          7za x "libclang-release_${{ env.LLVM_VERSION }}-based-macos-universal.7z" -o"$RUNNER_TEMP" > /dev/null
           rm "libclang-release_${{ env.LLVM_VERSION }}-based-macos-universal.7z"
-          echo "LLVM_INSTALL_DIR=/opt/libclang" >> "$GITHUB_ENV"
+          echo "LLVM_INSTALL_DIR=$RUNNER_TEMP/libclang" >> "$GITHUB_ENV"
       - name: Set up Python 3.14t
         run: |
           uv venv --python 3.14t .venv
