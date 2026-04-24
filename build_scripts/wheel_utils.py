@@ -41,9 +41,10 @@ def get_qt_version():
 @memoize
 def get_package_version():
     """ Returns the version string for the PySide6 package. """
-    # Hard-coded version for Dandelion-Science patched build.
-    # Bump this when applying new patches on top of an upstream release.
-    return "6.11.0.post1"
+    # Hard-coded version for Dandelion-Science patched build (3.14t wheels).
+    # Must match the upstream version so that CodeArtifact serves our cp314t
+    # wheels alongside PyPI's abi3 wheels under the same version.
+    return "6.11.0"
 
 
 def macos_qt_min_deployment_target():
