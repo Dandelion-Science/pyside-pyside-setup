@@ -9,7 +9,7 @@ on:
 
 env:
   QT_VERSION: "6.11.0"
-  PYSIDE_MODULE_SUBSET: "Core,Gui,Widgets"
+  PYSIDE_MODULE_SUBSET: "Core,Gui,Test,Widgets"
   # 6.11.0 does not support Clang 22+. Use Clang 21 from Qt's pre-built archives.
   LLVM_VERSION: "21.1.2"
 
